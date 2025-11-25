@@ -1,0 +1,176 @@
+cd ~/smart_camera
+mkdir -p templates
+cat > templates/index.html <<'HTML'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartCam — Dashboard</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#93a4bf;
+      --accent:#06b6d4;
+      --accent-2:#7c3aed;
+      --glass: rgba(255,255,255,0.04);
+      --card-radius: 12px;
+      --gap:16px;
+      --max-width:1100px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color: #e6eef8;
+    }
+    html,body{height:100%; margin:0; background:linear-gradient(180deg,#071126 0%, #081428 60%);}
+    .container{max-width:var(--max-width); margin:28px auto; padding:20px;}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-weight:700}
+    .brand h1{margin:0;font-size:18px}
+    .brand p{margin:0;color:var(--muted);font-size:13px}
+    .controls{display:flex;gap:10px;align-items:center}
+    .btn{background:var(--glass);border:1px solid rgba(255,255,255,0.04);padding:8px 12px;border-radius:10px;color:inherit;text-decoration:none;cursor:pointer;font-weight:600}
+    .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));box-shadow:0 6px 20px rgba(7,22,40,0.6);}
+    .grid{display:grid;grid-template-columns: 1fr 420px; gap:var(--gap)}
+    .card{background:var(--card);border-radius:var(--card-radius);padding:14px;box-shadow:0 6px 30px rgba(2,6,23,0.6);}
+    .stream-wrap{background:#000;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.03)}
+    .stream{display:block;width:100%;height:auto}
+    .meta{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+    .gallery{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px}
+    .thumb{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:10px; overflow:hidden;padding:8px;display:flex;flex-direction:column}
+    .thumb img{width:100%;height:140px;object-fit:cover;border-radius:6px}
+    .panel{display:flex;flex-direction:column;gap:12px}
+    .small{font-size:13px;color:var(--muted)}
+    footer{margin-top:22px;color:var(--muted);font-size:13px;text-align:center}
+    @media (max-width:980px){ .grid{grid-template-columns: 1fr;} .gallery{grid-template-columns:repeat(2,1fr)} }
+    a.thumb-link{color:inherit;text-decoration:none}
+    .thumb:hover{transform:translateY(-6px);transition:transform .18s ease}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo">SC</div>
+        <div>
+          <h1>SmartCam Dashboard</h1>
+          <p>Live monitoring • motion alerts • captures</p>
+        </div>
+      </div>
+      <div class="controls">
+        <div style="text-align:right">
+          <div class="small">Pi IP: <strong id="pi-ip">10.22.145.252</strong></div>
+          <div class="small">Stream: <span id="stream-url">{{ url_for('video_feed') }}</span></div>
+        </div>
+        <a class="btn" href="/download_ppt" title="Download Project PPT">Download PPT</a>
+        <button id="refreshBtn" class="btn">Refresh Gallery</button>
+        <form id="toggleForm" method="post" action="/toggle_alerts" style="display:inline">
+          <input type="hidden" name="action" id="toggleAction" value="enable">
+          <button id="toggleBtn" class="btn primary">Enable Alerts</button>
+        </form>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>Live Stream</strong><div class="small">Real-time MJPEG stream (auto-reconnect)</div></div>
+            <div class="small">Status: <span id="streamStatus">Connecting...</span></div>
+          </div>
+          <div class="stream-wrap" style="margin-top:12px">
+            <img id="liveStream" class="stream" src="{{ url_for('video_feed') }}" alt="Live stream"/>
+          </div>
+
+          <div class="meta">
+            <div class="left small"><div id="fps">FPS: --</div></div>
+            <div class="right small">Last capture: <span id="lastCap">--</span></div>
+          </div>
+
+          <h3 style="margin-top:14px">Recent Captures</h3>
+          <div id="gallery" class="gallery">
+            {% for f in files %}
+            <div class="thumb">
+              <a class="thumb-link" href="{{ url_for('capture_file', filename=f) }}" target="_blank">
+                <img src="{{ url_for('capture_file', filename=f) }}" alt="{{ f }}">
+              </a>
+              <div class="meta">
+                <div>{{ f }}</div>
+                <div><a href="{{ url_for('capture_file', filename=f) }}" download>Download</a></div>
+              </div>
+            </div>
+            {% endfor %}
+            {% if files|length == 0 %}
+              <div class="small">No captures yet — the detector will save images here.</div>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="card">
+          <strong>Quick Controls</strong>
+          <div class="list">
+            <div class="small">Alerts: <span id="alertsState">{{ 'Enabled' if alerts_enabled else 'Disabled' }}</span></div>
+            <div class="small">Toggle alerts to stop/start Telegram notifications and saves.</div>
+            <div style="margin-top:8px"><a class="btn" href="/captures">Open captures folder</a></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <strong>About</strong>
+          <div class="small">This UI streams the camera and shows recent captures. The "Download PPT" button serves your project file directly from the Pi.</div>
+        </div>
+
+        <div class="card">
+          <strong>Tips</strong>
+          <ul class="small">
+            <li>Use a stable mount for the camera to avoid false motion.</li>
+            <li>Tune motion_detector_strict.py thresholds for your environment.</li>
+            <li>Enable alerts to receive Telegram images on motion.</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+
+    <footer>
+      Built for your project — <em>Advanced_Python_Project.pptx</em>
+    </footer>
+  </div>
+
+  <script>
+    document.getElementById('refreshBtn').addEventListener('click', function(){ location.reload(); });
+    const toggleBtn = document.getElementById('toggleBtn');
+    const toggleAction = document.getElementById('toggleAction');
+    const alertsState = document.getElementById('alertsState');
+    if (alertsState && alertsState.innerText.trim() === 'Enabled'){
+      toggleBtn.innerText = 'Disable Alerts';
+      toggleAction.value = 'disable';
+      toggleBtn.classList.remove('primary');
+    } else {
+      toggleBtn.innerText = 'Enable Alerts';
+      toggleAction.value = 'enable';
+      toggleBtn.classList.add('primary');
+    }
+    const live = document.getElementById('liveStream');
+    let lastTime = Date.now();
+    live.addEventListener('load', function(){
+      const now = Date.now();
+      const dt = now - lastTime;
+      lastTime = now;
+      const fps = (dt>0)?(1000/dt).toFixed(1):'--';
+      document.getElementById('fps').innerText = 'FPS: ' + fps;
+      document.getElementById('streamStatus').innerText = 'Live';
+      fetch('/api/alerts_enabled').then(r => r.json()).then(j=>{ document.getElementById('alertsState').innerText = j.enabled ? 'Enabled' : 'Disabled'; }).catch(()=>{});
+    });
+    setInterval(()=>{ fetch(location.href).then(r=>r.text()).then(html=>{
+      const doc = new DOMParser().parseFromString(html,'text/html');
+      const newGallery = doc.getElementById('gallery');
+      if (newGallery) document.getElementById('gallery').innerHTML = newGallery.innerHTML;
+      const newLast = doc.getElementById('lastCap');
+      if (newLast) document.getElementById('lastCap').innerText = newLast.innerText;
+    }).catch(()=>{}); }, 10000);
+  </script>
+</body>
+</html>
+HTML
